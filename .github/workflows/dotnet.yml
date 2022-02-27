@@ -1,0 +1,50 @@
+name: Test and Deploy (Functions Action)
+
+on:
+  push:
+    branches: [ develop ]
+    paths-ignore: # these are files we can ignore so that a new build isn't started when they're updated
+      - '**/README.md'
+      - '**/*.yml'
+  workflow_dispatch:
+  
+env:
+  AZURE_FUNCTIONAPP_NAME: WaspInventoryFunApp-dev # this is the name of our azure function app resource
+  AZURE_FUNCTION_PROJ_PATH: BestBuy.Health.CareCenter.WaspInventory.FunctionApp  # set this to the path to our function app project
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:    
+      - name: Get the latest source code commit
+        uses: actions/checkout@v2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: ${{ env.ROOT_SOLUTION_PATH }}
+
+      - name: Build for Testing
+        run: dotnet build --no-restore
+        working-directory: ${{ env.ROOT_SOLUTION_PATH }}
+      
+      - name: Test
+        run: dotnet test --no-build --verbosity normal
+        working-directory: ${{ env.ROOT_SOLUTION_PATH }}
+      
+      - name: Build Function App for Release
+        run: dotnet build --configuration Release --output ./output
+        working-directory: ${{ env.AZURE_FUNCTION_PROJ_PATH }}
+
+      - name: 'Run Azure Functions Action'
+        uses: Azure/functions-action@v1
+        id: fa
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: '${{ env.AZURE_FUNCTION_PROJ_PATH }}/output'
+          publish-profile: ${{ secrets.AZURE_FUNCTION_PUBLISH_CREDS_DEV }}
